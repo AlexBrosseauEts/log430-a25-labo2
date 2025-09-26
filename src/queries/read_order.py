@@ -34,4 +34,14 @@ def get_highest_spending_users():
         expenses_by_user[o["user_id"]] += float(o["total"])
     top = sorted(expenses_by_user.items(), key=lambda kv: kv[1],reverse=True)
     return top[:limit]
+
+def get_most_sold_products(self, top=10):
+    product_ids = self.r.smembers("products:ids")
+    sales = []
+    for pid_b in product_ids:
+        pid = pid_b.decode()
+        count = int(self.r.get(f"product:{pid}:sold") or 0)
+        sales.append((pid, count))
+    sales.sort(key=lambda x: x[1], reverse=True)
+    return sales[:top]
     
