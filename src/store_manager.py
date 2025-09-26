@@ -12,7 +12,6 @@ from views.product_view import show_product_form, register_product, remove_produ
 from views.order_view import show_order_form, register_order, remove_order
 from views.report_view import show_highest_spending_users, show_best_sellers
 from commands.write_order import sync_all_orders_to_redis
-from database import db_session, redis_client   
 
 class StoreManager(BaseHTTPRequestHandler):
     def do_GET(self):
