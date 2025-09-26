@@ -3,6 +3,7 @@ Orders (write-only model)
 SPDX - License - Identifier: LGPL - 3.0 - or -later
 Auteurs : Gabriel C. Ullmann, Fabio Petrillo, 2025
 """
+from infra.db import db_session 
 from models.product import Product
 from models.order_item import OrderItem
 from models.order import Order
@@ -127,18 +128,22 @@ def sync_all_orders_to_redis():
     try:
         if len(orders_in_redis) == 0:
             # mysql
-            cnx = get_mysql_conn()
-            cursor = cnx.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM orders")
-            orders_from_mysql = cursor.fetchall()
-            cursor.close()
-            cnx.close()
+            orders_from_mysql = (
+                db_session.query(Order)
+                .options(joinedload(Order.items))
+                .all()
+            )
             for order in orders_from_mysql:
-                order_id = order["id"]
+                order_id = o.id
                 key = f"order:{order_id}"
-                # convert STR to Redits
-                mapping = {k: "" if v is None else str(v) for k, v in order.items()}
+                mapping = {
+                    "id": str(o.id),
+                    "user_id": str(o.user_id) if o.user_id is not None else "",
+                    "total": str(float(o.total)) if o.total is not None else "",
+                    "created_at": str(o.created_at) if getattr(o, "created_at", None) else "",
+                }
                 r.hset(key, mapping=mapping)
+                r.sadd("orders", o.id)
                 print(f"Inserted {key} -> {mapping}")
             rows_added = len(orders_from_mysql)
         else:
