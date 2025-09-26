@@ -3,7 +3,7 @@ Orders (write-only model)
 SPDX - License - Identifier: LGPL - 3.0 - or -later
 Auteurs : Gabriel C. Ullmann, Fabio Petrillo, 2025
 """
-from ..infra.db import db_session
+from infra.db import db_session
 from models.product import Product
 from models.order_item import OrderItem
 from models.order import Order
