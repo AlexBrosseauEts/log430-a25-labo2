@@ -127,22 +127,26 @@ def sync_all_orders_to_redis():
 
     try:
         if len(orders_in_redis) == 0:
-            engine = _make_engine_from_env()
-            conn = engine.connect()
-            result = conn.execute(text("SELECT id, user_id, total, created_at FROM orders"))
-            orders_from_mysql = [dict(row._mapping) for row in result]
-            for o in orders_from_mysql:
-                order_id = o.id
-                key = f"order:{order_id}"
-                mapping = {
-                    "id": str(o.id),
-                    "user_id": str(o.user_id) if o.user_id is not None else "",
-                    "total": str(float(o.total)) if o.total is not None else "",
-                    "created_at": str(o.created_at) if getattr(o, "created_at", None) else "",
-                }
-                r.hset(key, mapping=mapping)
-                r.sadd("orders", o.id)
-                print(f"Inserted {key} -> {mapping}")
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT id, user_id, total, created_at FROM orders")
+                )
+
+                for row in result:
+                    order_id = row["id"]
+                    key = f"order:{order_id}"
+
+                    mapping = {
+                        "id": str(row["id"]),
+                        "user_id": "" if row["user_id"] is None else str(row["user_id"]),
+                        "total": "" if row["total"] is None else str(float(row["total"])),
+                        "created_at": "" if row["created_at"] is None else str(row["created_at"]),
+                    }
+
+                    r.hset(key, mapping=mapping)
+                    r.sadd("orders", order_id)
+                    rows_added += 1
+                    print(f"Inserted {key} -> {mapping}")
             rows_added = len(orders_from_mysql)
         else:
             print("Redis already contains orders, no need to sync!")
