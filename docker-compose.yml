@@ -4,6 +4,7 @@ services:
     volumes:
       - .:/app
     environment:
+      PYTHONPATH: /app/src
       DB_HOST: mysql        
       DB_PORT: 3306
       DB_USER: labo02
@@ -12,6 +13,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: 0
+    command: python /app/src/store_manager.py
     ports:
       - "5000:5000"
     depends_on:
