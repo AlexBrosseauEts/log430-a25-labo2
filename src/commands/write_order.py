@@ -9,6 +9,7 @@ from models.order_item import OrderItem
 from models.order import Order
 from queries.read_order import get_orders_from_mysql
 from db import get_sqlalchemy_session, get_redis_conn
+from models import SessionLocal
 
 def add_order(user_id: int, items: list):
     """Insert order with items in MySQL, keep Redis in sync"""
@@ -125,15 +126,17 @@ def sync_all_orders_to_redis():
     r = get_redis_conn()
     orders_in_redis = r.keys(f"order:*")
     rows_added = 0
+    session = None
     try:
         if len(orders_in_redis) == 0:
             # mysql
+            session = SessionLocal()
             orders_from_mysql = (
-                db_session.query(Order)
+                session.query(Order)
                 .options(joinedload(Order.items))
                 .all()
             )
-            for order in orders_from_mysql:
+            for o in orders_from_mysql:
                 order_id = o.id
                 key = f"order:{order_id}"
                 mapping = {
@@ -147,9 +150,11 @@ def sync_all_orders_to_redis():
                 print(f"Inserted {key} -> {mapping}")
             rows_added = len(orders_from_mysql)
         else:
-            print('Redis already contains orders, no need to sync!')
+            print("Redis already contains orders, no need to sync!")
     except Exception as e:
         print(e)
         return 0
     finally:
+        if session:
+            session.close()
         return len(orders_in_redis) + rows_added
