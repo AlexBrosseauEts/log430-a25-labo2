@@ -125,13 +125,11 @@ def sync_all_orders_to_redis():
     r = get_redis_conn()
     orders_in_redis = r.keys(f"order:*")
     rows_added = 0
-    session = None
+
     try:
         if len(orders_in_redis) == 0:
             # mysql
-            session = SessionLocal()
             orders_from_mysql = (
-                session.query(Order)
                 .options(joinedload(Order.items))
                 .all()
             )
@@ -154,6 +152,4 @@ def sync_all_orders_to_redis():
         print(e)
         return 0
     finally:
-        if session:
-            session.close()
         return len(orders_in_redis) + rows_added
