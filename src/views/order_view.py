@@ -12,7 +12,7 @@ from controllers.user_controller import list_users
 def show_order_form():
     """ Show order form and list """
     # TODO: utilisez Redis seulement
-    orders = list_orders_from_mysql(10)
+    orders = get_orders_from_redis(10)
     products = list_products(99)
     users = list_users(99)
     order_rows = [f"""

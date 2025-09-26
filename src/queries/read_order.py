@@ -19,13 +19,19 @@ def get_orders_from_mysql(limit=9999):
     return session.query(Order).order_by(desc(Order.id)).limit(limit).all()
 
 def get_orders_from_redis(limit=9999):
-    """Get last X orders"""
-    # TODO: écrivez la méthode
-    print(limit)
-    return []
+    all_fields = self.r.hgetall("orders:index")
+    orders = []
+    for _, raw in all_fields.items():
+        orders.append(json.loads(raw.decode("utf-8")))
+    return orders
 
 def get_highest_spending_users():
     """Get report of best selling products"""
     # TODO: écrivez la méthode
-    # triez le résultat par nombre de commandes (ordre décroissant)
-    return []
+    orders = self.get_orders_from_redis()
+    expenses_by_user = defaultdict(float)
+    for o in orders
+        expenses_by_user[o["user_id"]] += float(o["total"])
+    top = sorted(expenses_by_user.items(), key=lambda kv: kv[1],reverse=True)
+    return top[:limit]
+    

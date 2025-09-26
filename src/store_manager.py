@@ -11,6 +11,8 @@ from views.user_view import show_user_form, register_user, remove_user
 from views.product_view import show_product_form, register_product, remove_product
 from views.order_view import show_order_form, register_order, remove_order
 from views.report_view import show_highest_spending_users, show_best_sellers
+from commands.write_order import OrderWriter
+from database import db_session, redis_client   
 
 class StoreManager(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -93,6 +95,10 @@ class StoreManager(BaseHTTPRequestHandler):
         self.wfile.write(html.encode("utf-8"))
 
 if __name__ == "__main__":
+    """ Init des données db + redis"""
+    writer = OrderWriter(db_session, redis_client)
+    writer.sync_all_orders_to_redis()
+
     server = HTTPServer(("0.0.0.0", 5000), StoreManager)
     print("Server running on http://0.0.0.0:5000")
     server.serve_forever()

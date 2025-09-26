@@ -98,13 +98,25 @@ def delete_order(order_id: int):
         session.close()
 
 def add_order_to_redis(order_id, user_id, total_amount, items):
-    """Insert order to Redis"""
-    r = get_redis_conn()
-    print(r)
+    self.db.add(order)
+    self.db.commit()
+    self.db.refresh(order)
+
+    payload = {
+        "id": order.id,
+        "user_id": order.user_id,
+        "total": float(order.total),
+        "created_at": order.created_at.isoformat()
+    }
+    self.r.hset("orders:index", order.id, json.dumps(payload))
 
 def delete_order_from_redis(order_id):
-    """Delete order from Redis"""
-    pass
+    order = self.db.get(Order,order_id)
+    if not order:
+        return
+    self.db.delete(order)
+    self.db.commit()
+    self.r.hdel("orders:index",order_id)
 
 def sync_all_orders_to_redis():
     """ Sync orders from MySQL to Redis """
@@ -115,10 +127,19 @@ def sync_all_orders_to_redis():
     try:
         if len(orders_in_redis) == 0:
             # mysql
-            orders_from_mysql = []
+            cnx = get_mysql_conn()
+            cursor = cnx.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM orders")
+            orders_from_mysql = cursor.fetchall()
+            cursor.close()
+            cnx.close()
             for order in orders_from_mysql:
-                # TODO: terminez l'implementation
-                print(order)
+                order_id = order["id"]
+                key = f"order:{order_id}"
+                # convert STR to Redits
+                mapping = {k: "" if v is None else str(v) for k, v in order.items()}
+                r.hset(key, mapping=mapping)
+                print(f"Inserted {key} -> {mapping}")
             rows_added = len(orders_from_mysql)
         else:
             print('Redis already contains orders, no need to sync!')
