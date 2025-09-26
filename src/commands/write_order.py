@@ -127,11 +127,10 @@ def sync_all_orders_to_redis():
 
     try:
         if len(orders_in_redis) == 0:
-            # mysql
-            orders_from_mysql = (
-                .options(joinedload(Order.items))
-                .all()
-            )
+            engine = _make_engine_from_env()
+            conn = engine.connect()
+            result = conn.execute(text("SELECT id, user_id, total, created_at FROM orders"))
+            orders_from_mysql = [dict(row._mapping) for row in result]
             for o in orders_from_mysql:
                 order_id = o.id
                 key = f"order:{order_id}"
