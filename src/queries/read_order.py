@@ -30,7 +30,7 @@ def get_highest_spending_users():
     # TODO: écrivez la méthode
     orders = self.get_orders_from_redis()
     expenses_by_user = defaultdict(float)
-    for o in orders
+    for o in orders:
         expenses_by_user[o["user_id"]] += float(o["total"])
     top = sorted(expenses_by_user.items(), key=lambda kv: kv[1],reverse=True)
     return top[:limit]
