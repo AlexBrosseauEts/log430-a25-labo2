@@ -148,7 +148,7 @@ def sync_all_orders_to_redis():
                     FROM orders o
                     LEFT JOIN order_items oi ON oi.order_id = o.id
                     GROUP BY o.id, o.user_id, o.created_at
-                    """))
+                """))
                 for row in result:
                     order_id = row["id"]
                     key = f"order:{order_id}"
