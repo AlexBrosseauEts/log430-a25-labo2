@@ -11,32 +11,41 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 def get_mysql_conn():
-    """Get a MySQL connection using env variables"""
+    """Get a MySQL connection using env variables (auth plugin forced)."""
     return mysql.connector.connect(
         host=config.DB_HOST,
         port=config.DB_PORT,
         user=config.DB_USER,
-        password=config.DB_PASS,
-        database=config.DB_NAME
+        password=config.DB_PASS,              
+        database=config.DB_NAME,
+        auth_plugin="caching_sha2_password",   
     )
 
+
 def get_redis_conn():
-    """Get a Redis connection using env variables"""
-    session = redis.Redis(host=config.REDIS_HOST, port=config.REDIS_PORT, db=config.REDIS_DB, decode_responses=True)
-    return session
-
-def get_sqlalchemy_session():
-    """Get an SQLAlchemy ORM session using env variables"""
-    connection_string = f'mysql+mysqlconnector://{config.DB_USER}:{config.DB_PASS}@{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}'
-    engine = create_engine(connection_string)
-    Session = sessionmaker(bind=engine)
-    return Session()
-
-_connection_string = (
+    """Get a Redis connection using env variables."""
+    return redis.Redis(
+        host=config.REDIS_HOST,
+        port=config.REDIS_PORT,
+        db=config.REDIS_DB,
+        decode_responses=True,
+    )
+_CONNECTION_STRING = (
     f"mysql+mysqlconnector://{config.DB_USER}:{config.DB_PASS}"
     f"@{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"
 )
+engine = create_engine(
+    _CONNECTION_STRING,
+    echo=False,
+    future=True,
+    pool_pre_ping=True,
+    connect_args={"auth_plugin": "caching_sha2_password"},
+)
 
-engine = create_engine(_connection_string, echo=False, future=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_sqlalchemy_session():
+    """Return a new SQLAlchemy ORM session bound to the shared engine."""
+    return SessionLocal()
+
 db_session = SessionLocal()
