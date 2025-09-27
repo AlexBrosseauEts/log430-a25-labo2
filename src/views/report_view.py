@@ -4,7 +4,7 @@ SPDX - License - Identifier: LGPL - 3.0 - or -later
 Auteurs : Gabriel C. Ullmann, Fabio Petrillo, 2025
 """
 from views.template_view import get_template, get_param
-
+from queries.read_order import get_highest_spenders, get_best_sellers
 def show_highest_spending_users():
     try:
         rows = get_highest_spenders()
