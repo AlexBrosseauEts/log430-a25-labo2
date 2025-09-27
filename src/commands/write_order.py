@@ -157,7 +157,7 @@ def sync_all_orders_to_redis():
             host = os.getenv("MYSQL_HOST", "mysql")
             db = os.getenv("MYSQL_DATABASE", "labo02_db")
 
-            url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{db}"
+            url = f"mysql+mysqlconnector://{user}:{password}@{host}:{3306}/{db}"
             engine = create_engine(url, pool_pre_ping=True)
             Session = sessionmaker(bind=engine)
             session = Session()
