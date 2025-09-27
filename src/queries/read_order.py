@@ -25,23 +25,36 @@ def get_orders_from_redis(limit=9999):
         orders.append(json.loads(raw.decode("utf-8")))
     return orders
 
-def get_highest_spending_users():
-    """Get report of best selling products"""
-    # TODO: écrivez la méthode
-    orders = self.get_orders_from_redis()
+def get_highest_spenders(limit=10):
+    """Get report of highest spending users from Redis"""
+    r = get_redis_conn()
+    orders_keys = r.keys("order:*")
     expenses_by_user = defaultdict(float)
-    for o in orders:
-        expenses_by_user[o["user_id"]] += float(o["total"])
-    top = sorted(expenses_by_user.items(), key=lambda kv: kv[1],reverse=True)
+
+    for key in orders_keys:
+        order = r.hgetall(key)
+        if not order:
+            continue
+        user_id = order.get(b"user_id")
+        total = order.get(b"total")
+        if user_id and total:
+            expenses_by_user[user_id.decode()] += float(total.decode())
+
+    top = sorted(expenses_by_user.items(), key=lambda kv: kv[1], reverse=True)
     return top[:limit]
 
-def get_most_sold_products(self, top=10):
-    product_ids = self.r.smembers("products:ids")
+
+def get_best_sellers(top=10):
+    """Get report of best selling products from Redis"""
+    r = get_redis_conn()
+    product_ids = r.smembers("products:ids")
     sales = []
+
     for pid_b in product_ids:
         pid = pid_b.decode()
-        count = int(self.r.get(f"product:{pid}:sold") or 0)
+        count = int(r.get(f"product:{pid}:sold") or 0)
         sales.append((pid, count))
+
     sales.sort(key=lambda x: x[1], reverse=True)
     return sales[:top]
     

@@ -7,7 +7,7 @@ from views.template_view import get_template, get_param
 from queries.read_order import get_highest_spending_users, get_most_sold_products
 def show_highest_spending_users():
     try:
-        rows = get_highest_spending_users()
+        rows = get_highest_spending_users(limit=10)
     except Exception as e:
         print(e)
         rows = []
@@ -42,7 +42,7 @@ def show_highest_spending_users():
 
 def show_best_sellers():
     try:
-        rows = get_most_sold_products()
+        rows = get_most_sold_products(limit=10)
     except Exception as e:
         print(e)
         rows = []
