@@ -11,7 +11,7 @@ from sqlalchemy import text
 from models.product import Product
 from models.order_item import OrderItem
 from models.order import Order
-from queries.read_order import get_orders_from_mysql  # (ok si utilisé ailleurs)
+from queries.read_order import get_orders_from_mysql
 from db import get_sqlalchemy_session, get_redis_conn, engine
 
 
@@ -20,7 +20,6 @@ def add_order(user_id: int, items: list):
     if not user_id or not items:
         raise ValueError("Vous devez indiquer au moins 1 utilisateur et 1 item pour chaque commande.")
 
-    # Valider et collecter les IDs produits
     try:
         product_ids = [int(item["product_id"]) for item in items]
     except Exception:
@@ -29,7 +28,6 @@ def add_order(user_id: int, items: list):
     session = get_sqlalchemy_session()
 
     try:
-        # Récupérer les prix par produit
         products_query = session.query(Product).filter(Product.id.in_(product_ids)).all()
         price_map = {product.id: product.price for product in products_query}
 
@@ -57,14 +55,11 @@ def add_order(user_id: int, items: list):
                 "unit_price": unit_price,
             })
 
-        # Créer la commande (en supposant que Order a un champ total_amount)
         new_order = Order(user_id=user_id, total_amount=total_amount)
         session.add(new_order)
-        session.flush()  # pour obtenir new_order.id
+        session.flush()
 
         order_id = int(new_order.id)
-
-        # Insérer les items
         for item_data in order_items_data:
             order_item = OrderItem(
                 order_id=order_id,
@@ -76,7 +71,6 @@ def add_order(user_id: int, items: list):
 
         session.commit()
 
-        # Garder Redis en sync
         add_order_to_redis(order_id, user_id, total_amount, items)
 
         return order_id
@@ -97,8 +91,6 @@ def delete_order(order_id: int):
         if order:
             session.delete(order)
             session.commit()
-
-            # Supprimer aussi dans Redis
             delete_order_from_redis(order_id)
             return 1
         else:
@@ -124,7 +116,6 @@ def add_order_to_redis(order_id, user_id, total_amount, items):
 
     if items:
         r.set(f"order:{order_id}:items", json.dumps(items))
-        # facultatif : maintenir un compteur de ventes par produit
         for it in items:
             pid = int(it["product_id"])
             qty = int(it["quantity"])
@@ -151,8 +142,6 @@ def sync_all_orders_to_redis():
 
     rows_added = 0
     try:
-        # Ta table 'orders' peut avoir total_amount ; sinon on le calcule via order_items
-        # On prend COALESCE(total_amount, SUM(...)) pour supporter les deux cas.
         with engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT

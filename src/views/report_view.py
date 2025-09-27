@@ -31,14 +31,11 @@ def _render_page(title: str, heading: str, ul_html: str) -> str:
     </html>
     """
 def show_highest_spending_users():
-    # 1) Essaye via la fonction utilitaire
     try:
-        rows = get_highest_spending_users()  # attendu: [(user_name, total_spent), ...]
+        rows = get_highest_spending_users()
     except Exception as e:
         print(e)
         rows = []
-
-    # 2) Fallback SQL direct si rien n'est revenu
     if not rows:
         try:
             with engine.connect() as conn:
@@ -56,15 +53,12 @@ def show_highest_spending_users():
         except Exception as e:
             print(e)
             rows = []
-
-    # 3) Construction robuste des <li> (supporte tuples ou dicts)
     items = []
     for row in rows:
         if isinstance(row, dict):
             user = row.get("user_name") or row.get("name")
             total = row.get("spent") or row.get("total") or 0
         else:
-            # tuple comme (user, total)
             try:
                 user, total = row
             except Exception:
@@ -88,7 +82,7 @@ def show_highest_spending_users():
 
 def show_best_sellers():
     try:
-        rows = get_most_sold_products()  # [(product_name, qty_sold), ...]
+        rows = get_most_sold_products()
     except Exception as e:
         print(e)
         rows = []
