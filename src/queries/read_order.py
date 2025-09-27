@@ -25,7 +25,7 @@ def get_orders_from_redis(limit=9999):
         orders.append(json.loads(raw.decode("utf-8")))
     return orders
 
-def get_highest_spenders(limit=10):
+def get_highest_spending_users(limit=10):
     """Get report of highest spending users from Redis"""
     r = get_redis_conn()
     orders_keys = r.keys("order:*")
@@ -44,7 +44,7 @@ def get_highest_spenders(limit=10):
     return top[:limit]
 
 
-def get_best_sellers(top=10):
+def get_most_sold_products(top=10):
     """Get report of best selling products from Redis"""
     r = get_redis_conn()
     product_ids = r.smembers("products:ids")
