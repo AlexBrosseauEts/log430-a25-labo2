@@ -5,7 +5,7 @@ Auteurs : Gabriel C. Ullmann, Fabio Petrillo, 2025
 """
 from views.template_view import get_template, get_param
 from queries.read_order import get_highest_spending_users, get_most_sold_products
-
+from db import engine
 def _render_page(title: str, heading: str, ul_html: str) -> str:
     return f"""<!DOCTYPE html>
     <html lang="fr">
