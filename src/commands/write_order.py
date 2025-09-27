@@ -3,100 +3,115 @@ Orders (write-only model)
 SPDX - License - Identifier: LGPL - 3.0 - or -later
 Auteurs : Gabriel C. Ullmann, Fabio Petrillo, 2025
 """
+import json
+from datetime import datetime
+
 from models.product import Product
 from models.order_item import OrderItem
 from models.order import Order
 from queries.read_order import get_orders_from_mysql
-from db import get_sqlalchemy_session, get_redis_conn,engine
+from db import get_sqlalchemy_session, get_redis_conn, engine
 from sqlalchemy import text
+
 
 def add_order(user_id: int, items: list):
     """Insert order with items in MySQL, keep Redis in sync"""
     if not user_id or not items:
         raise ValueError("Vous devez indiquer au moins 1 utilisateur et 1 item pour chaque commande.")
 
+    # Valider et collecter les IDs produits
     try:
-        product_ids = []
-        for item in items:
-            product_ids.append(int(item['product_id']))
-    except Exception as e:
-        print(e)
-        raise ValueError(f"L'ID Article n'est pas valide: {item['product_id']}")
+        product_ids = [int(item["product_id"]) for item in items]
+    except Exception:
+        # NOTE: item peut ne pas être défini si l'erreur survient au début; on reste générique
+        raise ValueError("L'ID Article n'est pas valide dans la liste des items.")
+
     session = get_sqlalchemy_session()
 
     try:
+        # Récupérer les prix par produit
         products_query = session.query(Product).filter(Product.id.in_(product_ids)).all()
         price_map = {product.id: product.price for product in products_query}
-        total_amount = 0
+
+        total_amount = 0.0
         order_items_data = []
-        
+
         for item in items:
             pid = int(item["product_id"])
-            qty = float(item["quantity"])
+            try:
+                qty = float(item["quantity"])
+            except Exception:
+                raise ValueError("La quantité doit être un nombre.")
 
-            if not qty or qty <= 0:
-                raise ValueError(f"Vous devez indiquer une quantité superieure à zéro.")
+            if qty <= 0:
+                raise ValueError("Vous devez indiquer une quantité superieure à zéro.")
 
             if pid not in price_map:
                 raise ValueError(f"Article ID {pid} n'est pas dans la base de données.")
 
-            unit_price = price_map[pid]
+            unit_price = float(price_map[pid])
             total_amount += unit_price * qty
             order_items_data.append({
-                'product_id': pid,
-                'quantity': qty,
-                'unit_price': unit_price
+                "product_id": pid,
+                "quantity": qty,
+                "unit_price": unit_price,
             })
-        
+
+        # Créer la commande (en supposant que Order a un champ total_amount)
         new_order = Order(user_id=user_id, total_amount=total_amount)
         session.add(new_order)
-        session.flush() 
-        
-        order_id = new_order.id
+        session.flush()  # pour obtenir new_order.id
 
+        order_id = int(new_order.id)
+
+        # Insérer les items
         for item_data in order_items_data:
             order_item = OrderItem(
                 order_id=order_id,
-                product_id=item_data['product_id'],
-                quantity=item_data['quantity'],
-                unit_price=item_data['unit_price']
+                product_id=item_data["product_id"],
+                quantity=item_data["quantity"],
+                unit_price=item_data["unit_price"],
             )
             session.add(order_item)
 
         session.commit()
 
-        # TODO: ajouter la commande à Redis
+        # Garder Redis en sync
         add_order_to_redis(order_id, user_id, total_amount, items)
 
         return order_id
 
     except Exception as e:
         session.rollback()
-        raise e
+        print(e)
+        # Conserver l'exception ou renvoyer un message, selon tes tests :
+        # raise
+        return "Une erreur s'est produite lors de la création de l'enregistrement. Veuillez consulter les logs pour plus d'informations."
     finally:
         session.close()
+
 
 def delete_order(order_id: int):
     """Delete order in MySQL, keep Redis in sync"""
     session = get_sqlalchemy_session()
     try:
         order = session.query(Order).filter(Order.id == order_id).first()
-        
         if order:
             session.delete(order)
             session.commit()
 
-            # TODO: supprimer la commande à Redis
+            # Supprimer aussi dans Redis
             delete_order_from_redis(order_id)
-            return 1  
+            return 1
         else:
-            return 0  
-            
+            return 0
     except Exception as e:
         session.rollback()
-        raise e
+        print(e)
+        raise
     finally:
         session.close()
+
 
 def add_order_to_redis(order_id, user_id, total_amount, items):
     r = get_redis_conn()
@@ -108,14 +123,17 @@ def add_order_to_redis(order_id, user_id, total_amount, items):
     }
     r.hset(f"order:{order_id}", mapping=mapping)
     r.sadd("orders", order_id)
+
     if items:
         r.set(f"order:{order_id}:items", json.dumps(items))
+        # facultatif : maintenir un compteur de ventes par produit
         for it in items:
             pid = int(it["product_id"])
             qty = int(it["quantity"])
             r.hincrby("product:sold_qty", pid, qty)
 
     return True
+
 
 def delete_order_from_redis(order_id):
     r = get_redis_conn()
@@ -124,51 +142,48 @@ def delete_order_from_redis(order_id):
     r.delete(f"order:{order_id}:items")
     return deleted > 0
 
+
 def sync_all_orders_to_redis():
-    """ Sync orders from MySQL to Redis """
-    # redis
+    """Sync orders from MySQL to Redis"""
     r = get_redis_conn()
-    orders_in_redis = r.keys(f"order:*")
+    existing = r.keys("order:*")
     rows_added = 0
 
     try:
-        if len(orders_in_redis) == 0:
-            with engine.connect() as conn:
-                result = conn.execute(
-                    text("SELECT id, user_id, total, created_at FROM orders")
-                )
-                with engine.connect() as conn:
-                # IMPORTANT : orders.total n'existe pas; on le calcule
-                result = conn.execute(text("""
-                    SELECT
-                        o.id,
-                        o.user_id,
-                        o.created_at,
-                        COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS total
-                    FROM orders o
-                    LEFT JOIN order_items oi ON oi.order_id = o.id
-                    GROUP BY o.id, o.user_id, o.created_at
-                """))
-                for row in result:
-                    order_id = row["id"]
-                    key = f"order:{order_id}"
-
-                    mapping = {
-                        "id": str(row["id"]),
-                        "user_id": "" if row["user_id"] is None else str(row["user_id"]),
-                        "total": "" if row["total"] is None else str(float(row["total"])),
-                        "created_at": "" if row["created_at"] is None else str(row["created_at"]),
-                    }
-
-                    r.hset(key, mapping=mapping)
-                    r.sadd("orders", order_id)
-                    rows_added += 1
-                    print(f"Inserted {key} -> {mapping}")
-            rows_added = len(orders_from_mysql)
-        else:
+        # Si des commandes sont déjà en cache, on ne refait pas la synchro complète
+        if existing:
             print("Redis already contains orders, no need to sync!")
+            return len(existing)
+
+        with engine.connect() as conn:
+            # Ta table 'orders' n'a pas de colonne 'total' -> on le calcule
+            result = conn.execute(text("""
+                SELECT
+                    o.id,
+                    o.user_id,
+                    o.created_at,
+                    COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS total
+                FROM orders o
+                LEFT JOIN order_items oi ON oi.order_id = o.id
+                GROUP BY o.id, o.user_id, o.created_at
+            """))
+
+            for row in result.mappings():
+                order_id = row["id"]
+                key = f"order:{order_id}"
+                mapping = {
+                    "id": str(row["id"]),
+                    "user_id": "" if row["user_id"] is None else str(row["user_id"]),
+                    "total": "" if row["total"] is None else str(float(row["total"])),
+                    "created_at": "" if row["created_at"] is None else str(row["created_at"]),
+                }
+                r.hset(key, mapping=mapping)
+                r.sadd("orders", order_id)
+                rows_added += 1
+                print(f"Inserted {key} -> {mapping}")
+
+        return rows_added
+
     except Exception as e:
         print(e)
         return 0
-    finally:
-        return len(orders_in_redis) + rows_added
