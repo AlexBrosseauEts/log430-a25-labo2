@@ -31,3 +31,12 @@ def get_sqlalchemy_session():
     engine = create_engine(connection_string)
     Session = sessionmaker(bind=engine)
     return Session()
+
+_connection_string = (
+    f"mysql+mysqlconnector://{config.DB_USER}:{config.DB_PASS}"
+    f"@{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"
+)
+
+engine = create_engine(_connection_string, echo=False, future=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+db_session = SessionLocal()
