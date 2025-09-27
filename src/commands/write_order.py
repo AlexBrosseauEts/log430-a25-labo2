@@ -174,7 +174,7 @@ def sync_all_orders_to_redis():
                 mapping = {
                     "id": str(row["id"]),
                     "user_id": "" if row["user_id"] is None else str(row["user_id"]),
-                    "total": "" if row["total"] is None else str(float(row["total"])),
+                    "total": str(float(o.total_amount)) if o.total_amount is not None else "",
                     "created_at": "" if row["created_at"] is None else str(row["created_at"]),
                 }
                 r.hset(key, mapping=mapping)
