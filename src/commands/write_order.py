@@ -11,7 +11,7 @@ from models.order_item import OrderItem
 from models.order import Order
 from queries.read_order import get_orders_from_mysql
 from db import get_sqlalchemy_session, get_redis_conn, engine
-from sqlalchemy import text
+from sqlalchemy import text,create_engine
 
 
 def add_order(user_id: int, items: list):
@@ -151,7 +151,13 @@ def sync_all_orders_to_redis():
     try:
         if len(orders_in_redis) == 0:
             # ORM query (no session object passed around)
-            engine = _make_engine_from_env()
+            user = os.getenv("MYSQL_USER", "user")
+            password = os.getenv("MYSQL_PASSWORD", "pass")
+            host = os.getenv("MYSQL_HOST", "mysql")
+            db = os.getenv("MYSQL_DATABASE", "labo02_db")
+
+            url = f"mysql+mysqlconnector://{user}:{password}@{host}/{db}"
+            engine = url
             Session = sessionmaker(bind=engine)
             session = Session()
             try:
