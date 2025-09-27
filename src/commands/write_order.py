@@ -99,25 +99,30 @@ def delete_order(order_id: int):
         session.close()
 
 def add_order_to_redis(order_id, user_id, total_amount, items):
-    self.db.add(order)
-    self.db.commit()
-    self.db.refresh(order)
-
-    payload = {
-        "id": order.id,
-        "user_id": order.user_id,
-        "total": float(order.total),
-        "created_at": order.created_at.isoformat()
+    r = get_redis_conn()
+    mapping = {
+        "id": str(order_id),
+        "user_id": "" if user_id is None else str(user_id),
+        "total": "" if total_amount is None else str(float(total_amount)),
+        "created_at": datetime.utcnow().isoformat(),
     }
-    self.r.hset("orders:index", order.id, json.dumps(payload))
+    r.hset(f"order:{order_id}", mapping=mapping)
+    r.sadd("orders", order_id)
+    if items:
+        r.set(f"order:{order_id}:items", json.dumps(items))
+        for it in items:
+            pid = int(it["product_id"])
+            qty = int(it["quantity"])
+            r.hincrby("product:sold_qty", pid, qty)
+
+    return True
 
 def delete_order_from_redis(order_id):
-    order = self.db.get(Order,order_id)
-    if not order:
-        return
-    self.db.delete(order)
-    self.db.commit()
-    self.r.hdel("orders:index",order_id)
+    r = get_redis_conn()
+    deleted = r.delete(f"order:{order_id}")
+    r.srem("orders", order_id)
+    r.delete(f"order:{order_id}:items")
+    return deleted > 0
 
 def sync_all_orders_to_redis():
     """ Sync orders from MySQL to Redis """
@@ -132,7 +137,18 @@ def sync_all_orders_to_redis():
                 result = conn.execute(
                     text("SELECT id, user_id, total, created_at FROM orders")
                 )
-
+                with engine.connect() as conn:
+                # IMPORTANT : orders.total n'existe pas; on le calcule
+                result = conn.execute(text("""
+                    SELECT
+                        o.id,
+                        o.user_id,
+                        o.created_at,
+                        COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS total
+                    FROM orders o
+                    LEFT JOIN order_items oi ON oi.order_id = o.id
+                    GROUP BY o.id, o.user_id, o.created_at
+                    """))
                 for row in result:
                     order_id = row["id"]
                     key = f"order:{order_id}"
