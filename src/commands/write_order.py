@@ -144,46 +144,42 @@ def delete_order_from_redis(order_id):
 
 
 def sync_all_orders_to_redis():
-    """Sync orders from MySQL to Redis"""
+    """ Sync orders from MySQL to Redis """
     r = get_redis_conn()
-    existing = r.keys("order:*")
+    orders_in_redis = r.keys("order:*")
     rows_added = 0
-
     try:
-        # Si des commandes sont déjà en cache, on ne refait pas la synchro complète
-        if existing:
-            print("Redis already contains orders, no need to sync!")
-            return len(existing)
+        if len(orders_in_redis) == 0:
+            # ORM query (no session object passed around)
+            engine = _make_engine_from_env()
+            Session = sessionmaker(bind=engine)
+            session = Session()
+            try:
+                orders_from_mysql = (
+                    session.query(Order)
+                    .options(joinedload(Order.items))
+                    .all()
+                )
+            finally:
+                session.close()
 
-        with engine.connect() as conn:
-            # Ta table 'orders' n'a pas de colonne 'total' -> on le calcule
-            result = conn.execute(text("""
-                SELECT
-                    o.id,
-                    o.user_id,
-                    o.created_at,
-                    COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS total
-                FROM orders o
-                LEFT JOIN order_items oi ON oi.order_id = o.id
-                GROUP BY o.id, o.user_id, o.created_at
-            """))
-
-            for row in result.mappings():
-                order_id = row["id"]
+            for order in orders_from_mysql:
+                order_id = order.id
                 key = f"order:{order_id}"
                 mapping = {
-                    "id": str(row["id"]),
-                    "user_id": "" if row["user_id"] is None else str(row["user_id"]),
-                    "total": str(float(o.total_amount)) if o.total_amount is not None else "",
-                    "created_at": "" if row["created_at"] is None else str(row["created_at"]),
+                    "id": str(order.id),
+                    "user_id": str(order.user_id) if order.user_id is not None else "",
+                    "total": str(float(order.total_amount)) if getattr(order, "total_amount", None) is not None else "",
+                    "created_at": str(order.created_at) if getattr(order, "created_at", None) else "",
                 }
                 r.hset(key, mapping=mapping)
                 r.sadd("orders", order_id)
-                rows_added += 1
                 print(f"Inserted {key} -> {mapping}")
-
-        return rows_added
-
+            rows_added = len(orders_from_mysql)
+        else:
+            print("Redis already contains orders, no need to sync!")
     except Exception as e:
         print(e)
         return 0
+    finally:
+        return len(orders_in_redis) + rows_added
