@@ -151,22 +151,17 @@ def sync_all_orders_to_redis():
     rows_added = 0
     try:
         if len(orders_in_redis) == 0:
-            # ORM query (no session object passed around)
             user = os.getenv("MYSQL_USER", "user")
             password = os.getenv("MYSQL_PASSWORD", "pass")
             host = os.getenv("MYSQL_HOST", "mysql")
             db = os.getenv("MYSQL_DATABASE", "labo02_db")
 
             url = f"mysql+mysqlconnector://{user}:{password}@{host}/{db}"
-            engine = url
+            engine = create_engine(url)
             Session = sessionmaker(bind=engine)
             session = Session()
             try:
-                orders_from_mysql = (
-                    session.query(Order)
-                    .options(joinedload(Order.items))
-                    .all()
-                )
+                orders_from_mysql = session.query(Order).all()
             finally:
                 session.close()
 
@@ -176,8 +171,11 @@ def sync_all_orders_to_redis():
                 mapping = {
                     "id": str(order.id),
                     "user_id": str(order.user_id) if order.user_id is not None else "",
-                    "total": str(float(order.total_amount)) if getattr(order, "total_amount", None) is not None else "",
-                    "created_at": str(order.created_at) if getattr(order, "created_at", None) else "",
+                    # Ton schéma SQL utilise total_amount
+                    "total": str(float(order.total_amount))
+                             if getattr(order, "total_amount", None) is not None else "",
+                    "created_at": str(order.created_at)
+                                  if getattr(order, "created_at", None) else "",
                 }
                 r.hset(key, mapping=mapping)
                 r.sadd("orders", order_id)
